@@ -1,0 +1,7 @@
+dist/
+build/
+node_modules/
+credentials.json
+token.json
+yarn-error.log
+.env
