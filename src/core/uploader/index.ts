@@ -4,7 +4,6 @@ import path from "path";
 import { OAuth2Client } from "google-auth-library";
 import { drive_v3, google } from "googleapis";
 import { IUploader } from "./interfaces/uploader";
-import { GaxiosResponse } from "gaxios";
 import { FOLDER_MIMETYPE } from "../../constants/mime_types";
 
 export class Uploader implements IUploader {
@@ -13,28 +12,18 @@ export class Uploader implements IUploader {
   constructor(oAuthClient: OAuth2Client) {
     this.driveClient = google.drive({
       version: "v3",
-      auth: oAuthClient
+      auth: oAuthClient,
     });
   }
 
   async uploadFile(filePath: string, parentID?: string): Promise<boolean> {
-    let response: GaxiosResponse<drive_v3.Schema$File>,
-      state = true,
+    let state = true,
       fileQuery = "",
-      alreadyExists = false;
+      fileID: string | null | undefined;
     const file = fs.createReadStream(filePath),
       fileName = path.basename(filePath),
-      parents = parentID ? [parentID] : [];
-
-    fileQuery += parentID ? `'${parentID}' in parents and name = ${fileName}` : `name = ${fileName}`;
-
-    try {
-      alreadyExists = ((await this.driveClient.files.list({
-        q: fileQuery,
-        fields: "files(id)",
-      })).data?.files?.length ?? 0) > 0;
-
-      response = await this.driveClient.files.create({
+      parents = parentID ? [parentID] : [],
+      body = {
         requestBody: {
           name: fileName,
           parents,
@@ -42,10 +31,27 @@ export class Uploader implements IUploader {
         media: {
           body: file,
         },
-        fields: "id",
-      });
-    }
-    catch(error: unknown) {
+      };
+
+    fileQuery += parentID
+      ? `'${parentID}' in parents and name = ${fileName}`
+      : `name = ${fileName}`;
+
+    try {
+      fileID = (
+        await this.driveClient.files.list({
+          q: fileQuery,
+          fields: "files(id)",
+        })
+      ).data?.files?.[0].id;
+
+      if (fileID !== null && fileID !== undefined)
+        await this.driveClient.files.update({
+          ...body,
+          fileId: fileID,
+        });
+      else await this.driveClient.files.create(body);
+    } catch (error: unknown) {
       // TODO: error log system.
       console.log(error);
       state = false;
@@ -63,20 +69,26 @@ export class Uploader implements IUploader {
       folderItems: string[] = [];
 
     try {
-      folderID = (await this.driveClient.files.list({
-        q: `name = '${folderName}' and mimeType = '${FOLDER_MIMETYPE}'`,
-        fields: "files(id)",
-      })).data.files?.[0].id ?? "";
+      folderID =
+        (
+          await this.driveClient.files.list({
+            q: `name = '${folderName}' and mimeType = '${FOLDER_MIMETYPE}'`,
+            fields: "files(id)",
+          })
+        ).data.files?.[0].id ?? "";
 
-      if(folderID === "")
-        folderID = (await this.driveClient.files.create({
-          requestBody: {
-            name: folderName,
-            mimeType: FOLDER_MIMETYPE,
-            parents,
-          },
-          fields: "id",
-        })).data.id ?? "";
+      if (folderID === "")
+        folderID =
+          (
+            await this.driveClient.files.create({
+              requestBody: {
+                name: folderName,
+                mimeType: FOLDER_MIMETYPE,
+                parents,
+              },
+              fields: "id",
+            })
+          ).data.id ?? "";
 
       folder = await fsPromises.opendir(folderPath);
 
@@ -85,8 +97,7 @@ export class Uploader implements IUploader {
       }
 
       await this.bulkUpload(folderItems, folderID);
-    }
-    catch (error: unknown) {
+    } catch (error: unknown) {
       // TODO: error log system
       console.log(error);
       state = false;
@@ -98,11 +109,12 @@ export class Uploader implements IUploader {
   async bulkUpload(uploadList: string[], parentID?: string): Promise<string[]> {
     const failed: string[] = [];
     let uploadResult: boolean;
-    for(const filePath of uploadList) {
-      uploadResult =  this.isFolder(filePath) ?
-        await this.uploadFolder(filePath, parentID) : await this.uploadFile(filePath, parentID);
+    for (const filePath of uploadList) {
+      uploadResult = this.isFolder(filePath)
+        ? await this.uploadFolder(filePath, parentID)
+        : await this.uploadFile(filePath, parentID);
 
-      if(!uploadResult) failed.push(filePath);
+      if (!uploadResult) failed.push(filePath);
     }
 
     return failed;

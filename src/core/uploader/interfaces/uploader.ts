@@ -20,5 +20,5 @@ export interface IUploader {
    * @description Upload a entire folder
    * @return upload state
    */
-  uploadFolder(path: string, parentID?: string): Promise<boolean>
+  uploadFolder(path: string, parentID?: string): Promise<boolean>;
 }
