@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node dist/index",
     "build": "tsc",
-    "build:watch": "tsc --watch"
+    "build:watch": "tsc --watch",
+    "dev": "nodemon index.ts"
   },
   "dependencies": {
     "googleapis": "^105.0.0",
@@ -23,6 +24,7 @@
     "eslint-config-airbnb-typescript": "^17.0.0",
     "eslint-config-google": "^0.14.0",
     "eslint-plugin-import": "^2.26.0",
+    "nodemon": "^2.0.19",
     "prettier": "^2.7.1"
   }
 }
